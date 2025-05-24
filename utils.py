@@ -1,41 +1,46 @@
 import os
 import json
-from datetime import datetime
+from datetime import date
+from typing import Optional
+import streamlit as st
 
-DATA_DIR = "records/"
-os.makedirs(DATA_DIR, exist_ok=True)
+def get_data_path() -> str:
+    return "data"
 
-def save_record(patient_id, file, record_type):
-    if file:
-        content = file.read()
-        filename = f"{patient_id}_{datetime.now().isoformat()}_{file.name}"
-        filepath = os.path.join(DATA_DIR, filename)
-        with open(filepath, "wb") as f:
-            f.write(content)
-        metadata = {
-            "patient_id": patient_id,
-            "filename": filename,
-            "record_type": record_type,
-            "uploaded": str(datetime.now()),
-            "access_granted": []
-        }
-        with open(filepath + ".meta.json", "w") as f:
-            json.dump(metadata, f)
+def load_patient_data(pid: str) -> Optional[dict]:
+    """Load patient data from a JSON file."""
+    path = os.path.join(get_data_path(), f"{pid}.json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return None
 
-def list_patient_records(patient_id, accessible_by=None):
-    results = []
-    for file in os.listdir(DATA_DIR):
-        if file.endswith(".meta.json"):
-            with open(os.path.join(DATA_DIR, file)) as f:
-                meta = json.load(f)
-                if meta["patient_id"] == patient_id:
-                    if accessible_by and accessible_by not in meta["access_granted"]:
-                        continue
-                    results.append(meta)
-    return results
+def save_patient_data(pid: str, data: dict) -> None:
+    """Save patient data to a JSON file."""
+    os.makedirs(get_data_path(), exist_ok=True)
+    path = os.path.join(get_data_path(), f"{pid}.json")
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
 
-def get_health_trends():
-    return {
-        "Blood Pressure": "120/80 mmHg (Avg)",
-        "Glucose": "98 mg/dL",
-    }
+def save_record(pid: str, rtype: str, rdate: date, file) -> None:
+    """Add a new record to the patient's data and optionally save the file."""
+    data = load_patient_data(pid) or {"ID": pid, "Records": [], "Appointments": []}
+
+    # Optional: Save uploaded file to 'data/uploads/<pid>/'
+    uploads_dir = os.path.join(get_data_path(), "uploads", pid)
+    os.makedirs(uploads_dir, exist_ok=True)
+    file_path = os.path.join(uploads_dir, file.name)
+    with open(file_path, "wb") as f:
+        f.write(file.getbuffer())
+
+    # Add metadata to patient's record
+    data["Records"].append({
+        "Type": rtype,
+        "Date": rdate.strftime("%Y-%m-%d"),
+        "File": file.name,
+        "FilePath": file_path,
+        "Summary": f"{file.name} uploaded",
+        "Access Granted To": []
+    })
+
+    save_patient_data(pid, data)
